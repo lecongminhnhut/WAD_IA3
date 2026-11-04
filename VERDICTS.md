@@ -1,0 +1,317 @@
+# Initial Version Predictions
+
+I made these predictions by reading the original source code, `brief.md`, and
+`README.md` before running the test table. These are not test observations. I
+have not marked any test row as PASS or FAIL, and I will replace these
+predictions with evidence after testing.
+
+## Version A
+
+### My prediction
+
+I predict that Version A will load and display the product cards correctly. It
+uses a five-second `AbortSignal.timeout`, checks the HTTP response, creates the
+cards in API order, formats prices in Vietnamese currency, and inserts product
+names with `textContent`. I also predict that its error state and Retry button
+will work for product-request errors.
+
+### Expected behavior
+
+I expect the page to show `Loading products…` while `/api/products` is
+pending. After the products arrive, I expect eight cards in the API order, the
+status line to clear, and the scarf name to remain literal text rather than
+becoming italic markup. I expect the error and hang conditions to show
+`Could not load products.` with Retry after the request fails or reaches five
+seconds.
+
+### Potential problem and source lines
+
+The stock requests are started inside `products.forEach(async (p) => ...)` at
+`public/versions/a.js:52-55`, but the promises are not collected or awaited.
+`public/versions/a.js:56` formats and writes `total` immediately. My prediction
+is that the stock value can be written as `0 đ` before any stock response has
+been added to `total`, and it will not be written again after the responses
+finish. An error from one of these unawaited `getStock` calls also cannot be
+handled by the surrounding `try...catch` at `public/versions/a.js:45-60`.
+
+### Relevant test rows
+
+I expect this issue to be exposed by row 2, which checks the calculated stock
+value after waiting. Row 7 may also expose the unhandled-rejection aspect if a
+stock request produces an error, although the listed standard server modes
+primarily exercise the product request. Rows 1, 3, 4, 5, and 6 are relevant to
+checking that the other parts of the implementation remain correct.
+
+### Provisional verdict
+
+My provisional verdict is **fix**.
+
+### Reasoning
+
+The product loading and rendering structure is close to the brief, but stock
+calculation is a required part of the brief. Because Version A does not wait
+for all stock requests before writing the total, I would not keep the original
+implementation without a targeted fix.
+
+## Version B
+
+### My prediction
+
+I predict that Version B will render cards, escape product names safely by
+using `textContent`, request stock for all products in parallel with
+`Promise.all`, and calculate the stock total after all stock responses arrive.
+I also predict that its normal, slow, error, retry, and empty flows are
+otherwise structured according to the brief.
+
+### Expected behavior
+
+I expect Version B to show the loading message, render the eight products in
+order, preserve the literal scarf text, clear the status after a successful
+load, and show the expected stock value after the parallel stock requests
+finish. I expect the error state to clear the catalogue, show the failure
+message, and reveal Retry.
+
+### Potential problem and source lines
+
+At `public/versions/b.js:16`, Version B passes `{ timeout: 5000 }` to
+`fetch`. The browser Fetch API does not use this option as a request timeout.
+Therefore, my prediction is that the products request will not be aborted after
+five seconds. In the server's `hang` mode, the page may continue showing
+`Loading products…` until the server eventually responds instead of entering
+the required failure state after about five seconds.
+
+The same line may also be reported by VS Code when `// @ts-check` is enabled,
+because `timeout` is not a standard `RequestInit` property.
+
+### Relevant test rows
+
+I expect row 6 to be the main test for this problem. Row 8 may also identify
+the invalid `timeout` option through the JavaScript type checker. Rows 1, 2, 3,
+4, 5, and the additional `empty` condition are relevant to verifying the
+working rendering, stock, escaping, retry, and empty-list behavior.
+
+### Provisional verdict
+
+My provisional verdict is **fix**.
+
+### Reasoning
+
+Version B handles the stock calculation more reliably than Version A, but the
+five-second timeout is an explicit requirement. Since the timeout option in the
+source does not implement that requirement, I would fix it before keeping the
+version.
+
+## Version C
+
+### My prediction
+
+I predict that Version C will satisfy the brief. It uses
+`AbortSignal.timeout(5000)`, checks non-2xx responses, renders with a template
+and `textContent`, preserves API order, and waits for all stock requests with
+`Promise.all` before calculating the total.
+
+### Expected behavior
+
+I expect Version C to show the loading message, render eight correctly
+formatted cards, preserve `Scarf <i>limited</i>` as visible text, calculate
+`12.360.000 đ`, and show `0 đ` with `No products yet.` for an empty response. I
+expect error and hang modes to show the required failure message and Retry
+button, and I expect Retry to start a fresh request.
+
+### Potential problems and source lines
+
+From the source reading, I do not identify a specific implementation problem
+in Version C. The relevant timeout logic is at `public/versions/c.js:16`, the
+response-status check is at `public/versions/c.js:17`, safe text insertion is at
+`public/versions/c.js:33-34`, and the parallel stock calculation is at
+`public/versions/c.js:53-57`.
+
+I still need to check row 8 with `// @ts-check`, because that is a required
+editor/type-checking condition rather than something I can claim from a
+runtime source reading alone.
+
+### Relevant test rows
+
+Rows 1 through 8 and the additional `empty` condition are relevant to
+confirming this prediction. The CSR versus SSR questions in `README.md` are
+also part of the assignment comparison, although they are not specific bugs in
+Version C.
+
+### Provisional verdict
+
+My provisional verdict is **keep**.
+
+### Reasoning
+
+Version C appears to implement each requirement in the brief, including the
+parts that Version A and Version B appear to mishandle. I will keep this as a
+provisional verdict only until I have collected the required test evidence.
+
+## Summary before testing
+
+| Version | Provisional verdict | Main source-level concern |
+|---|---|---|
+| A | fix | Stock requests are not awaited at `a.js:52-56`. |
+| B | fix | `fetch` timeout option is ineffective at `b.js:16`. |
+| C | keep | No specific source-level problem identified before testing. |
+
+These are predictions based on source inspection only. I have not run the
+server, browser, Network checks, Console checks, or VS Code type check yet.
+
+---
+
+## Original test results (Rows 1–9)
+
+I executed all nine tests independently for the original implementations of Version A, Version B, and Version C before any code modifications were made. The server was running on `http://localhost:5050`. I inspected the browser UI, the DOM, DevTools Network waterfall, Console, and terminal output for each row.
+
+### Initial predictions vs. actual test results
+
+- **Version A:** My source prediction was confirmed. Row 2 failed with `Stock value: 0 đ` because `products.forEach(async (p) => ...)` at `public/versions/a.js:52-56` dispatches asynchronous requests without awaiting them, executing line 56 synchronously while `total` is still `0`. All other rows (1, 3–9) passed as predicted.
+- **Version B:** My source predictions for Row 6 and Row 8 were confirmed. In hang mode (Row 6), the page remained stuck on `Loading products…` after 7+ seconds because `{ timeout: 5000 }` at `public/versions/b.js:16` is ignored by the browser Fetch API. In Row 8, the TypeScript check flagged `error TS2353` for `timeout` on `RequestInit`. However, my speculative concern about Row 7 failing due to unhandled stock rejection was corrected: Row 7 actually passed because stock fetch errors were caught in the individual `try/catch` at `b.js:21-25`, falling back to `0` stock.
+- **Version C:** My prediction was confirmed across all 9 rows. Version C satisfied every requirement in the brief, handled concurrency, escaping, timeouts, and errors cleanly, and reported 0 type diagnostics.
+
+### Version A (Original)
+
+| Row | Requirement / Scenario | Server Condition | Result | Actual observation | Responsible lines | Evidence |
+|:---:|:---|:---|:---:|:---|:---|:---|
+| 1 | Render 8 cards in API order, VND format, empty status line | `normal` | **PASS** | Exactly 8 cards rendered in `/api/products` order; prices formatted with dot separators (e.g., `180.000 đ`); status line cleared. | — | `evidence/a-row1.png` |
+| 2 | Independent stock calculation; correct total displayed | `normal` | **FAIL** | Stock value displays `0 đ` permanently. Network tab shows all 8 `/api/stock/:id` requests returned HTTP 200 within 220–594 ms, but `stockValue.textContent = formatVnd(total)` was executed synchronously before responses arrived. | `public/versions/a.js:52-56` | `evidence/a-row2.png` |
+| 3 | XSS safety: Scarf name rendered as literal text | `normal` | **PASS** | The last card displays `Scarf <i>limited</i>` with literal angle brackets visible; no italic formatting. | — | `evidence/a-row3.png` |
+| 4 | Delay handling | `slow` | **PASS** | Status displayed `Loading products…` for ~3 seconds, then rendered 8 cards and cleared status line. | — | `evidence/a-row4.png` |
+| 5 | Error handling & Retry | `error` → `normal` | **PASS** | Mode `error` showed `Could not load products.` and `#retry` button, catalogue was empty. Switching to `normal` and clicking Retry rendered 8 cards and hid the button. | — | `evidence/a-row5.png` |
+| 6 | Timeout handling (5s abort) | `hang` | **PASS** | In hang mode, the request was canceled after 5.00s via `AbortSignal.timeout(5000)`, transitioning to `Could not load products.` and `#retry`. | — | `evidence/a-row6.png` |
+| 7 | Console cleanliness | all modes | **PASS** | Watched Console during rows 1–6. No `Uncaught …` errors were thrown; only expected browser HTTP 500 network diagnostic appeared. | — | `evidence/a-row7.png` |
+| 8 | TypeScript static analysis | folder | **PASS** | Executed `npx.cmd tsc -p jsconfig.json --checkJs --noEmit`. `public/versions/a.js` reported 0 errors. | — | `evidence/a-row8.png` |
+| 9 | Empty response | `empty` | **PASS** | Mode `empty` rendered `No products yet.`, stock value `0 đ`, and 0 product cards. | — | `evidence/a-row9.png` |
+
+#### Version A Verdict Sheet
+
+- **Rows that failed:** Row 2
+- **What I saw (the screen, the Network tab, the Console, the terminal):** The page rendered 8 cards in order, but the stock value permanently displayed `0 đ`. In DevTools Network, all eight `/api/stock/:id` requests were dispatched in parallel and returned HTTP 200, but `stockValue.textContent = formatVnd(total)` at `a.js:56` executed synchronously before the asynchronous callbacks resolved.
+- **The line(s) of code responsible:** `public/versions/a.js:52-56`
+- **Verdict:** **fix** (deciding row: Row 2)
+- **The one sentence I would tell the assistant:** *"Row 2: stock value displays 0 đ even though all 8 stock requests returned HTTP 200, because forEach(async...) writes the total before requests complete (a.js:52-56). Wait for all requests to finish before updating stock value, but keep requests running concurrently in parallel."*
+
+---
+
+### Version B (Original)
+
+| Row | Requirement / Scenario | Server Condition | Result | Actual observation | Responsible lines | Evidence |
+|:---:|:---|:---|:---:|:---|:---|:---|
+| 1 | Render 8 cards in API order, VND format, empty status line | `normal` | **PASS** | Exactly 8 cards rendered in API order; prices formatted like `180.000 đ`; status line empty. | — | `evidence/b-row1.png` |
+| 2 | Independent stock calculation; correct total displayed | `normal` | **PASS** | Dispatched all 8 stock requests concurrently using `Promise.all`. Correctly computed and displayed stock total `12.360.000 đ`. | — | `evidence/b-row2.png` |
+| 3 | XSS safety: Scarf name rendered as literal text | `normal` | **PASS** | The last card displays `Scarf <i>limited</i>` with literal angle brackets visible; no italic formatting. | — | `evidence/b-row3.png` |
+| 4 | Delay handling | `slow` | **PASS** | Status displayed `Loading products…` for ~3 seconds, then rendered 8 cards and cleared status line. | — | `evidence/b-row4.png` |
+| 5 | Error handling & Retry | `error` → `normal` | **PASS** | Mode `error` showed `Could not load products.` and `#retry` button; catalogue was cleared. Switching to `normal` and clicking Retry rendered 8 cards. | — | `evidence/b-row5.png` |
+| 6 | Timeout handling (5s abort) | `hang` | **FAIL** | Page remained stuck on `Loading products…` after 7+ seconds. The `{ timeout: 5000 }` option passed to `fetch` was ignored, causing the request to hang until the server closed it at 30 seconds. | `public/versions/b.js:16` | `evidence/b-row6.png` |
+| 7 | Console cleanliness | all modes | **PASS** | No uncaught runtime exceptions during rows 1–6. | — | `evidence/b-row7.png` |
+| 8 | TypeScript static analysis | folder | **FAIL** | Compiler reported `public/versions/b.js(16,51): error TS2353: Object literal may only specify known properties, and 'timeout' does not exist in type 'RequestInit'`. | `public/versions/b.js:16` | `evidence/b-row8.png` |
+| 9 | Empty response | `empty` | **PASS** | Mode `empty` rendered `No products yet.`, stock value `0 đ`, and 0 product cards. | — | `evidence/b-row9.png` |
+
+#### Version B Verdict Sheet
+
+- **Rows that failed:** Row 6, Row 8
+- **What I saw (the screen, the Network tab, the Console, the terminal):** In hang mode, the page remained stuck on `Loading products…` well past 7 seconds, failing to abort at 5 seconds. In the terminal, running `npx tsc -p jsconfig.json --checkJs --noEmit` reported `TS2353` on line 16 because `fetch` in web standards does not recognize `{ timeout: 5000 }`.
+- **The line(s) of code responsible:** `public/versions/b.js:16`
+- **Verdict:** **fix** (deciding rows: Row 6 and Row 8)
+- **The one sentence I would tell the assistant:** *"Rows 6 and 8: in hang mode the page remains stuck on 'Loading products…' after 7 seconds, and tsc reports TS2353 at b.js:16 because timeout does not exist in RequestInit. Use AbortSignal.timeout(5000) as the abort signal without changing anything else."*
+
+---
+
+### Version C (Original)
+
+| Row | Requirement / Scenario | Server Condition | Result | Actual observation | Responsible lines | Evidence |
+|:---:|:---|:---|:---:|:---|:---|:---|
+| 1 | Render 8 cards in API order, VND format, empty status line | `normal` | **PASS** | Exactly 8 cards rendered in API order; prices formatted like `180.000 đ`; status line empty. | — | `evidence/c-row1.png` |
+| 2 | Independent stock calculation; correct total displayed | `normal` | **PASS** | Dispatched all 8 stock requests concurrently using `Promise.all`. Correctly computed and displayed `12.360.000 đ`. | — | `evidence/c-row2.png` |
+| 3 | XSS safety: Scarf name rendered as literal text | `normal` | **PASS** | The last card displays `Scarf <i>limited</i>` with literal angle brackets visible; no italic formatting. | — | `evidence/c-row3.png` |
+| 4 | Delay handling | `slow` | **PASS** | Status displayed `Loading products…` for ~3 seconds, then rendered 8 cards and cleared status line. | — | `evidence/c-row4.png` |
+| 5 | Error handling & Retry | `error` → `normal` | **PASS** | Mode `error` showed `Could not load products.` and `#retry` button; catalogue was cleared. Clicking Retry in normal mode recovered cleanly. | — | `evidence/c-row5.png` |
+| 6 | Timeout handling (5s abort) | `hang` | **PASS** | In hang mode, the request was canceled after 5.00s via `AbortSignal.timeout(5000)`, transitioning to `Could not load products.` and `#retry`. | — | `evidence/c-row6.png` |
+| 7 | Console cleanliness | all modes | **PASS** | No uncaught runtime exceptions during rows 1–6. | — | `evidence/c-row7.png` |
+| 8 | TypeScript static analysis | folder | **PASS** | Executed `npx.cmd tsc -p jsconfig.json --checkJs --noEmit`. `public/versions/c.js` reported 0 errors. | — | `evidence/c-row8.png` |
+| 9 | Empty response | `empty` | **PASS** | Mode `empty` rendered `No products yet.`, stock value `0 đ`, and 0 product cards. | — | `evidence/c-row9.png` |
+
+#### Version C Verdict Sheet
+
+- **Rows that failed:** None (0 failures)
+- **What I saw (the screen, the Network tab, the Console, the terminal):** Satisfies all requirements: renders 8 cards in API order, computes `12.360.000 đ` with parallel stock requests, renders `<i>limited</i>` as literal text, handles slow/error/empty modes cleanly, aborts hang mode at 5.00s via `AbortSignal.timeout(5000)`, produces no uncaught console errors, and compiles with 0 TypeScript diagnostics under `jsconfig.json`.
+- **The line(s) of code responsible:** None
+- **Verdict:** **keep** (deciding row: None / satisfies all 9 rows)
+- **The one sentence I would tell the assistant:** *"keep — satisfies all 9 rows without any defects."*
+
+---
+
+## Post-fix regression testing
+
+I ran the post-fix browser regression against `http://localhost:5050` after
+the Version A and Version B fix commits. I executed rows 1-9 for Versions A,
+B, and C. The original evidence remains unchanged; the new evidence is in
+`evidence/fixed/`.
+
+The runtime tests below are based on the observed application behavior. Row 8
+is recorded after executing the TypeScript compiler check using `npx.cmd tsc -p jsconfig.json --checkJs --noEmit`
+via the local environment's Node/TypeScript installation.
+
+### Version A
+
+| Row | Result | Actual observation | Evidence |
+|---|---|---|---|
+| 1 | PASS | The page loaded, eight product cards rendered in API order, and the normal stock total was `12.360.000 đ`. | `evidence/fixed/a-row1.png` |
+| 2 | PASS | All eight stock requests were dispatched concurrently, the program waited for them, and the displayed total was `12.360.000 đ`. | `evidence/fixed/a-row2.png` |
+| 3 | PASS | Product text including `Scarf <i>limited</i>` was displayed as text, not interpreted as HTML. | `evidence/fixed/a-row3.png` |
+| 4 | PASS | The loading-delay case rendered the products and cleared the loading/error state after the delayed response. | `evidence/fixed/a-row4.png` |
+| 5 | PASS | The initial error showed `Could not load products.` and Retry; retrying loaded the catalogue and restored the normal total. | `evidence/fixed/a-row5.png` |
+| 6 | PASS | The hanging request reached the failure state and did not leave the page permanently in the loading state. | `evidence/fixed/a-row6.png` |
+| 7 | PASS | The runtime failure case did not produce an uncaught browser exception in the observed run. | `evidence/fixed/a-row7.png` |
+| 8 | PASS | I executed `npx.cmd tsc -p jsconfig.json --checkJs --noEmit`; `public/versions/a.js` contains 0 type errors. DOM element casts and `Promise.all` stock calculations check cleanly. | `evidence/fixed/a-row8.png` |
+| 9 | PASS | The empty response showed `No products yet.` and `0 đ` without product cards. | `evidence/fixed/a-row9.png` |
+
+### Version B
+
+| Row | Result | Actual observation | Evidence |
+|---|---|---|---|
+| 1 | PASS | The page loaded, eight product cards rendered in API order, and the normal stock total was `12.360.000 đ`. | `evidence/fixed/b-row1.png` |
+| 2 | PASS | Stock requests remained concurrent and the completed stock total was `12.360.000 đ`. | `evidence/fixed/b-row2.png` |
+| 3 | PASS | Product text including `Scarf <i>limited</i>` was displayed safely as text. | `evidence/fixed/b-row3.png` |
+| 4 | PASS | The loading-delay case rendered the products and cleared the loading/error state after the delayed response. | `evidence/fixed/b-row4.png` |
+| 5 | PASS | The initial error showed the required message and Retry; retrying restored the catalogue and normal total. | `evidence/fixed/b-row5.png` |
+| 6 | PASS | The hanging request was aborted by the valid timeout mechanism and the UI left the loading state with the failure message and Retry. | `evidence/fixed/b-row6.png` |
+| 7 | PASS | The runtime failure case did not produce an uncaught browser exception in the observed run. | `evidence/fixed/b-row7.png` |
+| 8 | PASS | I executed `npx.cmd tsc -p jsconfig.json --checkJs --noEmit`; `public/versions/b.js` contains 0 type errors. Replacing `{ timeout: 5000 }` with `AbortSignal.timeout(5000)` completely resolved the TS2353 error. | `evidence/fixed/b-row8.png` |
+| 9 | PASS | The empty response showed `No products yet.` and `0 đ` without product cards. | `evidence/fixed/b-row9.png` |
+
+### Version C
+
+| Row | Result | Actual observation | Evidence |
+|---|---|---|---|
+| 1 | PASS | The page loaded, eight product cards rendered in API order, and the normal stock total was `12.360.000 đ`. | `evidence/fixed/c-row1.png` |
+| 2 | PASS | Stock requests were concurrent, all completed, and the displayed total was `12.360.000 đ`. | `evidence/fixed/c-row2.png` |
+| 3 | PASS | Product text including `Scarf <i>limited</i>` was displayed safely as text. | `evidence/fixed/c-row3.png` |
+| 4 | PASS | The loading-delay case rendered the products and cleared the loading/error state after the delayed response. | `evidence/fixed/c-row4.png` |
+| 5 | PASS | The initial error showed the required message and Retry; retrying restored the catalogue and normal total. | `evidence/fixed/c-row5.png` |
+| 6 | PASS | The hanging request reached the required failure state instead of remaining stuck loading. | `evidence/fixed/c-row6.png` |
+| 7 | PASS | The runtime failure case did not produce an uncaught browser exception in the observed run. | `evidence/fixed/c-row7.png` |
+| 8 | PASS | I executed `npx.cmd tsc -p jsconfig.json --checkJs --noEmit`; `public/versions/c.js` contains 0 type errors. AbortSignal timeout and `Promise.all` stock requests check cleanly. | `evidence/fixed/c-row8.png` |
+| 9 | PASS | The empty response showed `No products yet.` and `0 đ` without product cards. | `evidence/fixed/c-row9.png` |
+
+### TypeScript check result
+
+I executed the required TypeScript check using `npx.cmd tsc -p jsconfig.json --checkJs --noEmit` via the local Node/TypeScript runtime. The compiler checked all files included in `jsconfig.json`. The only diagnostics reported across the project were two starter harness property warnings in `public/panel.js` (`TS2339: Property 'dataset' does not exist on type 'Element'`). For the three version implementations:
+- `public/versions/a.js`: 0 errors found (PASS).
+- `public/versions/b.js`: 0 errors found (PASS; the previous TS2353 `timeout` property error is completely resolved).
+- `public/versions/c.js`: 0 errors found (PASS).
+
+Consequently, all three post-fix implementations now genuinely satisfy Row 8.
+
+### Post-fix summary
+
+| Version | Runtime result | TypeScript (Row 8) | Final post-fix status |
+|---|---|---|---|
+| A | 8 PASS | PASS | **KEEP** (all 9 rows PASS; stock calculation race condition resolved). |
+| B | 8 PASS | PASS | **KEEP** (all 9 rows PASS; timeout mechanism and TS2353 resolved). |
+| C | 8 PASS | PASS | **KEEP** (all 9 rows PASS; unchanged original implementation). |
+
+I did not replace the original failures in this document. The original
+Version A Row 2 failure and Version B Rows 6 and 8 failures remain historical
+results; this section records only the post-fix regression evidence.
