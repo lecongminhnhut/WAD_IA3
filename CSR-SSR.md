@@ -64,7 +64,7 @@ In the source of `/ssr`, the scarf card's heading reads:
 ```
 
 **Why it reads `&lt;i&gt;`:**  
-Looking at `server.mjs` (lines 29–37), the server passes product names through an `escapeHtml()` function:
+Looking at `server.mjs` (lines 66–70), the server passes product names through an `escapeHtml()` function:
 ```javascript
 function escapeHtml(s) {
   return String(s)

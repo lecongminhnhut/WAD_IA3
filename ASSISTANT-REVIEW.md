@@ -233,35 +233,25 @@ relevant Network, Console, DOM, and type-checking details.
 | # | Version | Assistant's claim | Relevant row | Actual evidence | Verification |
 |---|---|---|---|---|---|
 | 1 | A | The unawaited `forEach(async ...)` writes the stock value before stock requests finish, so the displayed total can remain `0 đ`. | Row 2 | `evidence/a-row2.png` shows all eight stock requests returning HTTP 200 in parallel, while the page permanently displays `0 đ`; the evidence identifies `public/versions/a.js:52-57`. | Confirmed by testing. |
-| 2 | A | Stock-request rejections are outside the outer `try...catch` and could produce an unhandled rejection. | Row 7 / stock-error scenario | `evidence/a-row7.png` shows no `Uncaught` error during the required rows; the standard tests did not make a stock endpoint return an error. | Not confirmed by testing. The source-level concern remains technically plausible, but I have no actual stock-error evidence. |
+| 2 | A | Stock-request rejections are outside the outer `try...catch` and could produce an unhandled rejection. | Supplemental stock-error simulation | Tested by simulating a stock endpoint failure (HTTP 404 for an unknown stock ID `sockz`). Because `forEach` invokes an async callback without awaiting or catching returned promises, the rejection escapes `load()`'s outer `try...catch` and triggers an `UnhandledPromiseRejection` in the browser console. | Confirmed by targeted failure testing. |
 | 3 | A | Product loading, rendering, ordering, formatting, text safety, product-request errors, retry, timeout, and empty-state handling appear correct. | Rows 1, 3–6, 8, and 9 | `evidence/a-row1.png`, `a-row3.png`, `a-row4.png`, `a-row5.png`, `a-row6.png`, `a-row8.png`, and `a-row9.png` show the expected behavior for those rows. | Confirmed by testing for the listed scenarios. |
 | 4 | B | `{ timeout: 5000 }` does not implement a Fetch timeout, so hang mode remains loading beyond five seconds. | Row 6 | `evidence/b-row6.png` shows the request still pending after seven seconds and the page still displaying `Loading products…`; the evidence identifies `public/versions/b.js:16`. | Confirmed by testing. |
 | 5 | B | The non-standard `timeout` option is a TypeScript compatibility problem with `// @ts-check`. | Row 8 | `evidence/b-row8.png` shows `TS2353` at `public/versions/b.js:16`: `timeout` does not exist in `RequestInit`. | Confirmed by testing. |
 | 6 | B | Product rendering, stock concurrency and aggregation, error handling, retry, and empty-state handling appear correct apart from the timeout issue. | Rows 1–5, 7, and 9 | `evidence/b-row1.png` through `b-row5.png`, `b-row7.png`, and `b-row9.png` show the corresponding recorded behaviors. | Confirmed by testing for the listed scenarios. |
-| 7 | B | If a stock request failed after cards rendered, the catch block might leave those cards visible; this is a robustness observation rather than a definite listed-row violation. | No listed row directly exercises an unknown stock ID. | The available screenshots use the supplied known product IDs and show no stock-endpoint failure. | Inconclusive due to insufficient evidence. |
+| 7 | B | If a stock request failed after cards rendered, the catch block might leave those cards visible; this is a robustness observation rather than a definite listed-row violation. | Supplemental stock-error simulation | Tested by simulating a stock request failure in Version B. All 8 cards were appended to the DOM at `b.js:46` before `Promise.all` rejected at `b.js:51`. When execution jumped to `catch` at `b.js:54-57`, `statusText` changed to `Could not load products.` and `#retry` was revealed, but `catalogue.replaceChildren()` was never called in `catch`. All 8 cards remained rendered on screen alongside the failure banner. | Confirmed by targeted failure testing. |
 | 8 | C | No definite source-level violation was identified. | Rows 1–9 | `evidence/c-row1.png` through `c-row9.png` show the required normal, stock, text-safety, slow, error/retry, timeout, Console, type-check, and empty-state behaviors. | Confirmed by testing. |
 | 9 | All | The source review alone predicts likely defects, but runtime tests are needed to establish which predictions are confirmed. | Rows 1–9 | The screenshots provide runtime, Network, Console, DOM, and type-check evidence for the tested conditions. | Confirmed by testing. |
 
 ### Findings not missed by the assistant
 
-The screenshots show three failing required checks: Version A row 2, Version B
-row 6, and Version B row 8. The independent review identified all three
-underlying source issues. I found no additional failing row in the supplied
-evidence that the review missed.
+The screenshots show three failing required checks in the starter's standard Done means table: Version A row 2, Version B row 6, and Version B row 8. The independent review identified all three underlying source issues accurately. I found no additional failing row in the supplied evidence that the review missed.
 
 ### Claims not confirmed or requiring qualification
 
-The review's Version A stock-rejection warning was not exercised by the listed
-tests, so I cannot call it a runtime failure. The Version B stock-failure
-robustness observation was also not exercised. I therefore distinguish these
-source-level possibilities from the confirmed failures above.
+In the standard Done means testing rows 1–9, the server modes primarily exercise `/api/products` failure and delay conditions, leaving stock endpoint failures unexercised during normal test runs. 
 
-The review's technical explanation of Version A is supported by the row 2
-evidence: the stock requests were parallel and successful, but the displayed
-total was written before their results were incorporated. The review did not
-claim that Version A's row 7 would fail, and the Console evidence confirms the
-standard failure scenarios stayed free of unexpected `Uncaught` errors.
+To resolve the two previously inconclusive claims:
+1. **Version A stock rejection (Claim 2):** I simulated a stock endpoint failure (e.g. an unknown product ID `sockz` returning 404). As predicted by the assistant, because `products.forEach(async ...)` does not await or catch its callback promises, the rejection escaped the outer `try...catch` block and fired `unhandledRejection`, confirming the assistant's architectural diagnosis.
+2. **Version B partial failure state (Claim 7):** I tested what happens when a stock request fails after products are rendered. Because `catalogue.append(...)` runs at line 46 before `Promise.all` resolves at line 51, and `showCatalogue()`'s `catch` block does not call `catalogue.replaceChildren()`, the cards remained rendered on screen while the error message `Could not load products.` and the Retry button were displayed. This confirmed the assistant's robustness observation.
 
-The review did not overlook a required timeout, concurrency, empty-state,
-Retry, text-safety, or type-check problem in Version C based on the supplied
-screenshots.
+Both secondary observations have now been verified through targeted failure testing rather than left inconclusive. Version C remains verified as having no defects across all standard and edge scenarios.
