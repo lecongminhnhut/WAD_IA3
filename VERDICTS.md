@@ -158,3 +158,78 @@ provisional verdict only until I have collected the required test evidence.
 These are predictions based on source inspection only. I have not run the
 server, browser, Network checks, Console checks, or VS Code type check yet.
 
+---
+
+## Post-fix regression testing
+
+I ran the post-fix browser regression against `http://localhost:5050` after
+the Version A and Version B fix commits. I executed rows 1-9 for Versions A,
+B, and C. The original evidence remains unchanged; the new evidence is in
+`evidence/fixed/`.
+
+The runtime tests below are based on the observed application behavior. Row 8
+is recorded separately because the requested command was attempted, but the
+local PowerShell execution policy prevented `npx.ps1` from running. I do not
+claim a compiler PASS from that blocked command.
+
+### Version A
+
+| Row | Result | Actual observation | Evidence |
+|---|---|---|---|
+| 1 | PASS | The page loaded, eight product cards rendered in API order, and the normal stock total was `12.360.000 đ`. | `evidence/fixed/a-row1.png` |
+| 2 | PASS | All eight stock requests were dispatched concurrently, the program waited for them, and the displayed total was `12.360.000 đ`. | `evidence/fixed/a-row2.png` |
+| 3 | PASS | Product text including `Scarf <i>limited</i>` was displayed as text, not interpreted as HTML. | `evidence/fixed/a-row3.png` |
+| 4 | PASS | The loading-delay case rendered the products and cleared the loading/error state after the delayed response. | `evidence/fixed/a-row4.png` |
+| 5 | PASS | The initial error showed `Could not load products.` and Retry; retrying loaded the catalogue and restored the normal total. | `evidence/fixed/a-row5.png` |
+| 6 | PASS | The hanging request reached the failure state and did not leave the page permanently in the loading state. | `evidence/fixed/a-row6.png` |
+| 7 | PASS | The runtime failure case did not produce an uncaught browser exception in the observed run. | `evidence/fixed/a-row7.png` |
+| 8 | INCOMPLETE | I attempted `npx tsc -p jsconfig.json --checkJs --noEmit`, but PowerShell blocked `npx.ps1`; therefore I do not claim a completed project compiler result. | `evidence/fixed/a-row8.png` |
+| 9 | PASS | The empty response showed `No products yet.` and `0 đ` without product cards. | `evidence/fixed/a-row9.png` |
+
+### Version B
+
+| Row | Result | Actual observation | Evidence |
+|---|---|---|---|
+| 1 | PASS | The page loaded, eight product cards rendered in API order, and the normal stock total was `12.360.000 đ`. | `evidence/fixed/b-row1.png` |
+| 2 | PASS | Stock requests remained concurrent and the completed stock total was `12.360.000 đ`. | `evidence/fixed/b-row2.png` |
+| 3 | PASS | Product text including `Scarf <i>limited</i>` was displayed safely as text. | `evidence/fixed/b-row3.png` |
+| 4 | PASS | The loading-delay case rendered the products and cleared the loading/error state after the delayed response. | `evidence/fixed/b-row4.png` |
+| 5 | PASS | The initial error showed the required message and Retry; retrying restored the catalogue and normal total. | `evidence/fixed/b-row5.png` |
+| 6 | PASS | The hanging request was aborted by the valid timeout mechanism and the UI left the loading state with the failure message and Retry. | `evidence/fixed/b-row6.png` |
+| 7 | PASS | The runtime failure case did not produce an uncaught browser exception in the observed run. | `evidence/fixed/b-row7.png` |
+| 8 | INCOMPLETE | I attempted the required TypeScript command, but PowerShell blocked `npx.ps1`; no compiler PASS is claimed from that command. | `evidence/fixed/b-row8.png` |
+| 9 | PASS | The empty response showed `No products yet.` and `0 đ` without product cards. | `evidence/fixed/b-row9.png` |
+
+### Version C
+
+| Row | Result | Actual observation | Evidence |
+|---|---|---|---|
+| 1 | PASS | The page loaded, eight product cards rendered in API order, and the normal stock total was `12.360.000 đ`. | `evidence/fixed/c-row1.png` |
+| 2 | PASS | Stock requests were concurrent, all completed, and the displayed total was `12.360.000 đ`. | `evidence/fixed/c-row2.png` |
+| 3 | PASS | Product text including `Scarf <i>limited</i>` was displayed safely as text. | `evidence/fixed/c-row3.png` |
+| 4 | PASS | The loading-delay case rendered the products and cleared the loading/error state after the delayed response. | `evidence/fixed/c-row4.png` |
+| 5 | PASS | The initial error showed the required message and Retry; retrying restored the catalogue and normal total. | `evidence/fixed/c-row5.png` |
+| 6 | PASS | The hanging request reached the required failure state instead of remaining stuck loading. | `evidence/fixed/c-row6.png` |
+| 7 | PASS | The runtime failure case did not produce an uncaught browser exception in the observed run. | `evidence/fixed/c-row7.png` |
+| 8 | INCOMPLETE | I attempted the required TypeScript command, but PowerShell blocked `npx.ps1`; no compiler PASS is claimed from that command. | `evidence/fixed/c-row8.png` |
+| 9 | PASS | The empty response showed `No products yet.` and `0 đ` without product cards. | `evidence/fixed/c-row9.png` |
+
+### TypeScript check result
+
+I ran the exact command `npx tsc -p jsconfig.json --checkJs --noEmit`. It did
+not reach TypeScript because this environment rejected `npx.ps1` under its
+PowerShell execution policy. I also tried `npx.cmd`; it could not obtain the
+uncached `tsc` package in the restricted environment. Consequently, the three
+Row 8 entries remain **INCOMPLETE**, not PASS.
+
+### Post-fix summary
+
+| Version | Runtime result | Final status for this regression record |
+|---|---|---|
+| A | 8 PASS, 1 INCOMPLETE | KEEP for the confirmed runtime behavior; Row 8 still requires a successful TypeScript check. |
+| B | 8 PASS, 1 INCOMPLETE | KEEP for the confirmed runtime behavior and timeout fix; Row 8 still requires a successful TypeScript check. |
+| C | 8 PASS, 1 INCOMPLETE | KEEP for the confirmed runtime behavior; Row 8 still requires a successful TypeScript check. |
+
+I did not replace the original failures in this document. The original
+Version A Row 2 failure and Version B Rows 6 and 8 failures remain historical
+results; this section records only the post-fix regression evidence.
